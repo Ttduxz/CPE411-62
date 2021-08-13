@@ -274,7 +274,7 @@ namespace DNWS
         {
             if (_instance == null)
             {
-                _instance = new DotNetWebServer(parent, 8, 8, ThreadType.Multi);
+                _instance = new DotNetWebServer(parent, 8, 8, ThreadType.ThreadPool);
             }
             return _instance;
         }
@@ -316,14 +316,17 @@ namespace DNWS
                     HTTPProcessor hp = new HTTPProcessor(clientSocket, _parent);
                    if (_threadType is ThreadType.Single)
                    {
+                       _parent.Log("this is Single");
                        hp.Process();
                    }
                    else if (_threadType is ThreadType.ThreadPool)
                    {
+                        _parent.Log("this is Pool");
                        ThreadPool.QueueUserWorkItem(ThreadPoolMode, new TaskInfo(hp));
                    }
                    else if (_threadType is ThreadType.Multi)
                    {
+                        _parent.Log("this is Multi");
                        MultiMode(new TaskInfo(hp));
                    }
                 }
