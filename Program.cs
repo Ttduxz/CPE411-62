@@ -4,6 +4,7 @@ using System.Text;
 using System.Net.Sockets;
 using System.Net;
 using System.IO;
+using System.Threading;
 using Microsoft.Extensions.Configuration;
 
 
@@ -236,6 +237,13 @@ namespace DNWS
         }
     }
 
+     public enum ThreadType  {
+        Single,
+        Multi,
+        ThreadPool
+    };
+
+
     /// <summary>
     /// Main server class, open the socket and wait for client
     /// </summary>
@@ -247,11 +255,14 @@ namespace DNWS
         protected Socket clientSocket;
         private static DotNetWebServer _instance = null;
         protected int id;
+        protected ThreadType _threadType;
 
-        private DotNetWebServer(Program parent)
+        private DotNetWebServer(Program parent, int workerThreads, int completionPortThreads, ThreadType threadType)
         {
             _parent = parent;
+            _threadType = threadType;
             id = 0;
+            ThreadPool.SetMaxThreads(workerThreads, completionPortThreads);
         }
 
         /// <summary>
@@ -263,9 +274,23 @@ namespace DNWS
         {
             if (_instance == null)
             {
-                _instance = new DotNetWebServer(parent);
+                _instance = new DotNetWebServer(parent, 8, 8, ThreadType.Multi);
             }
             return _instance;
+        }
+
+           public void ThreadPoolMode(Object stat)
+        {
+            TaskInfo ti = stat as TaskInfo;
+            HTTPProcessor hp = ti.hp;
+            hp.Process();
+        }
+
+           public void MultiMode(Object stat)
+        {
+            TaskInfo ti = stat as TaskInfo;
+            Thread t = new Thread(() => ti.hp.Process());
+            t.Start();
         }
 
         /// <summary>
@@ -284,12 +309,23 @@ namespace DNWS
             {
                 try
                 {
-                    // Wait for client
+                     // Wait for client
                     clientSocket = serverSocket.Accept();
                     // Get one, show some info
                     _parent.Log("Client accepted:" + clientSocket.RemoteEndPoint.ToString());
                     HTTPProcessor hp = new HTTPProcessor(clientSocket, _parent);
-                    hp.Process();
+                   if (_threadType is ThreadType.Single)
+                   {
+                       hp.Process();
+                   }
+                   else if (_threadType is ThreadType.ThreadPool)
+                   {
+                       ThreadPool.QueueUserWorkItem(ThreadPoolMode, new TaskInfo(hp));
+                   }
+                   else if (_threadType is ThreadType.Multi)
+                   {
+                       MultiMode(new TaskInfo(hp));
+                   }
                 }
                 catch (Exception ex)
                 {
